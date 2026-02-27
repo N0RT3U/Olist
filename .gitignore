@@ -5,33 +5,19 @@ __pycache__/
 *.so
 .Python
 build/
-develop-eggs/
 dist/
-downloads/
 eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
 
 # Jupyter Notebook
-.ipynb_checkpoints
-*.ipynb_checkpoints/
+.ipynb_checkpoints/
 
 # Environments
 .env
 .venv
 env/
 venv/
-ENV/
-env.bak/
-venv.bak/
 
 # IDEs
 .vscode/
@@ -47,21 +33,12 @@ Thumbs.db
 # Logs
 *.log
 
-# Data (선택적 - 대용량 파일 제외)
+# Data
 *.csv
-# Data (선택적 - 대용량 파일 제외)
-*.csv
-!kys/Olist_DataSet/ML_olist.csv
-!kys/Olist_DataSet/merged_olist.csv
-!kys/Result/risk_report_result.csv
+!data/ML_olist.csv
+!data/merged_olist.csv
+!data/risk_report_result.csv
 *.xlsx
-*.txt
-!requirements.txt
-*.png
-*.pdf
-*.xlsx
-*.txt
-!requirements.txt
 *.png
 *.pdf
 
