@@ -8,6 +8,10 @@ import os
 import sys
 from pathlib import Path
 
+# 프로젝트 루트 경로 설정
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / 'data'
+
 # 같은 디렉토리의 스크립트 임포트
 sys.path.append(str(Path(__file__).parent))
 from generate_risk_data import generate_risk_report
@@ -28,11 +32,12 @@ st.set_page_config(
 def load_ml_data():
     """ML_olist.csv 로딩 및 기본 전처리"""
     try:
-        df = pd.read_csv('kys/Olist_DataSet/ML_olist.csv')
+        df = pd.read_csv(DATA_DIR / 'ML_olist.csv')
         # 날짜 컬럼 변환
-        df['order_purchase_timestamp'] = pd.to_datetime(df['order_purchase_timestamp'])
         df['order_approved_at'] = pd.to_datetime(df['order_approved_at'])
-        df['year_month'] = df['order_purchase_timestamp'].dt.to_period('M').astype(str)
+        df['year_month'] = df['order_approved_at'].dt.to_period('M').astype(str)
+        # 유의 판매자 플래그: 배송 지연(seller_delay_days > 0)인 건
+        df['is_Seller_of_Note'] = df['seller_delay_days'] > 0
         return df
     except FileNotFoundError:
         st.error("ML_olist.csv 파일을 찾을 수 없습니다!")
@@ -46,7 +51,7 @@ def load_risk_data():
     
     # 없으면 파일에서 로드
     try:
-        df = pd.read_csv('kys/Result/risk_report_result.csv')
+        df = pd.read_csv(DATA_DIR / 'risk_report_result.csv')
         st.session_state.risk_data = df
         return df
     except FileNotFoundError:
@@ -60,12 +65,11 @@ def aggregate_seller_data(df):
         'seller_processing_days': 'mean',
         'seller_delay_days': 'mean',
         'review_score': 'mean',
-        'is_Seller_of_Note': 'first',
         'is_logistics_fault': lambda x: (x == True).sum() / len(x) * 100
     }).reset_index()
-    
-    seller_agg.columns = ['seller_id', 'order_count', 'avg_processing_days', 
-                          'avg_delay_days', 'avg_review_score', 'is_seller_of_note',
+
+    seller_agg.columns = ['seller_id', 'order_count', 'avg_processing_days',
+                          'avg_delay_days', 'avg_review_score',
                           'logistics_fault_rate']
     return seller_agg
 
@@ -80,8 +84,8 @@ st.sidebar.header("🛠️ 필터 설정")
 
 if not df_ml.empty:
     # 날짜 범위 필터
-    min_date = df_ml['order_purchase_timestamp'].min().date()
-    max_date = df_ml['order_purchase_timestamp'].max().date()
+    min_date = df_ml['order_approved_at'].min().date()
+    max_date = df_ml['order_approved_at'].max().date()
     
     date_range = st.sidebar.date_input(
         "날짜 범위",
@@ -97,15 +101,23 @@ if not df_ml.empty:
     # 위험 판매자 Threshold (위험 모니터링용)
     st.sidebar.markdown("---")
     st.sidebar.subheader("위험 판매자 기준")
-    risk_threshold = st.sidebar.slider("위험 확률 기준", 0.0, 1.0, 0.30, 0.05)
-    
+    risk_threshold_pct = st.sidebar.slider(
+        "위험 확률 기준 (%)", 0, 100, 30, 5,
+        help="💡 위험 확률 기준이란?\n\n"
+             "ML 모델이 판매자가 다음 달 '유의 판매자'로 전환될 확률을 0~100%로 예측합니다. "
+             "이 기준값 이상인 판매자를 '위험 판매자'로 분류합니다."
+    )
+    risk_threshold = risk_threshold_pct / 100
+
     # 위험 등급 필터
     if not df_risk.empty:
         priority_options = st.sidebar.multiselect(
             "위험 등급 필터",
             options=['RED', 'ORANGE', 'YELLOW'],
             default=['RED', 'ORANGE', 'YELLOW'],
-            help="표시할 위험 등급을 선택하세요"
+            help="🔴 RED (80% 이상): 즉시 조치 필요. 제재/경고 대상\n\n"
+                 "🟠 ORANGE (40~80%): 주의 관찰 대상. 사전 예방 권장\n\n"
+                 "🟡 YELLOW (30~40%): 경미한 위험. 모니터링 유지"
         )
     else:
         priority_options = ['RED', 'ORANGE', 'YELLOW']
@@ -124,7 +136,7 @@ if not df_ml.empty:
     st.sidebar.subheader("📊 데이터 갱신")
     
     # 마지막 갱신 시간 표시
-    risk_file_path = 'kys/Result/risk_report_result.csv'
+    risk_file_path = str(DATA_DIR / 'risk_report_result.csv')
     if os.path.exists(risk_file_path):
         last_modified = datetime.fromtimestamp(os.path.getmtime(risk_file_path))
         st.sidebar.info(f"마지막 갱신: {last_modified.strftime('%Y-%m-%d %H:%M')}")
@@ -171,8 +183,8 @@ if not df_ml.empty:
     # 필터 적용
     if len(date_range) == 2:
         df_filtered = df_ml[
-            (df_ml['order_purchase_timestamp'].dt.date >= date_range[0]) &
-            (df_ml['order_purchase_timestamp'].dt.date <= date_range[1])
+            (df_ml['order_approved_at'].dt.date >= date_range[0]) &
+            (df_ml['order_approved_at'].dt.date <= date_range[1])
         ].copy()
     else:
         df_filtered = df_ml.copy()
@@ -211,7 +223,19 @@ TARGET_LOGISTICS_FAULT = 50.0  # 물류 문제율 목표 (%)
 delay_rate = (len(df_filtered[df_filtered['seller_delay_days'] > 0]) / len(df_filtered) * 100)
 negative_rate = (len(df_filtered[df_filtered['review_score'] <= 2]) / len(df_filtered) * 100)
 total_sellers = df_filtered['seller_id'].nunique()
-risk_sellers = df_filtered[df_filtered['is_Seller_of_Note'] == True]['seller_id'].nunique()
+# 유의 판매자: 위험 예측 데이터가 있으면 threshold 기반, 없으면 규칙 기반
+if not df_risk.empty and 'y_pred_proba' in df_risk.columns:
+    _risk_seller_ids = df_risk[df_risk['y_pred_proba'] >= risk_threshold]['seller_id'].unique()
+    # df_filtered 내 판매자로 한정
+    _risk_seller_ids = [s for s in _risk_seller_ids if s in df_filtered['seller_id'].values]
+    risk_sellers = len(_risk_seller_ids)
+else:
+    _seller_stats = df_filtered.groupby('seller_id').agg(
+        avg_delay=('seller_delay_days', 'mean'),
+        avg_review=('review_score', 'mean')
+    )
+    _risk_seller_ids = _seller_stats[(_seller_stats['avg_delay'] > 0) & (_seller_stats['avg_review'] < 3)].index
+    risk_sellers = len(_risk_seller_ids)
 risk_ratio = (risk_sellers / total_sellers * 100) if total_sellers > 0 else 0
 logistics_fault_rate = (df_filtered['is_logistics_fault'].sum() / len(df_filtered) * 100)
 

@@ -12,13 +12,17 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import precision_score, recall_score, f1_score
 from datetime import datetime
 import os
+from pathlib import Path
 
 warnings.filterwarnings('ignore')
 
+_PROJECT_ROOT = Path(__file__).parent.parent
+_DATA_DIR = _PROJECT_ROOT / 'data'
+
 
 def generate_risk_report(
-    input_path='kys/Olist_DataSet/merged_olist.csv',
-    output_path='kys/Result/risk_report_result.csv'
+    input_path=str(_DATA_DIR / 'merged_olist.csv'),
+    output_path=str(_DATA_DIR / 'risk_report_result.csv')
 ):
     """
     위험 판매자 예측 데이터 생성
