@@ -19,9 +19,12 @@ from generate_risk_data import generate_risk_report
 # =========================================================
 # 페이지 기본 설정
 # =========================================================
+from PIL import Image
+_icon = Image.open(PROJECT_ROOT / 'assets' / 'icon.jpeg')
+
 st.set_page_config(
-    page_title="Olist 비즈니스 대시보드", 
-    page_icon="📊", 
+    page_title="Olist 비즈니스 대시보드",
+    page_icon=_icon,
     layout="wide"
 )
 
